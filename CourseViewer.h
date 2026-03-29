@@ -89,10 +89,14 @@ struct CourseViewer {
     GLuint iron_tex = 0;
     GLuint crystal_tex = 0;
     GLuint stone_tex = 0;
+    GLuint capsule_tex = 0;
+    GLuint flip_tex = 0;
     bool   sprites_loaded = false;
     bool   iron_sprites_loaded = false;
     bool   crystal_sprites_loaded = false;
     bool   stone_sprites_loaded = false;
+    bool   capsule_sprites_loaded = false;
+    bool   flip_sprites_loaded = false;
 
     static constexpr int   COLS    = 9;
     static constexpr int   SPRITE  = 40;   // sprite size in the sheet
@@ -240,6 +244,73 @@ struct CourseViewer {
 
         iron_sprites_loaded = true;
     }
+
+    void load_capsule_sprites(const TimDecoded& tim) {
+
+        if (tim.img_w < SPRITE || tim.img_h < SPRITE) return;
+        if (tim.index_data.empty()) return;
+
+        int pages = (int)tim.clut_pages.size();
+
+        // Load capsule sprite
+        if (pages > 0) {
+            const ClutPage& pg = tim.clut_pages[0]; // Use the first CLUT page
+
+            std::vector<uint32_t> sprite(SPRITE * SPRITE);
+            for (int y = 0; y < SPRITE; y++) {
+                for (int x = 0; x < SPRITE; x++) {
+                    uint8_t idx = tim.index_data[y * tim.img_w + x];
+                    sprite[y * SPRITE + x] = (idx < pg.colors) ? pg.palette[idx] : 0u;
+                }
+            }
+
+            GLuint tex_id;
+            glGenTextures(1, &tex_id);
+            glBindTexture(GL_TEXTURE_2D, tex_id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SPRITE, SPRITE, 0, GL_RGBA, GL_UNSIGNED_BYTE, sprite.data());
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+            capsule_tex = tex_id;
+        }
+
+        capsule_sprites_loaded = true;
+    }
+
+    void load_flip_sprites(const TimDecoded& tim) {
+
+        if (tim.img_w < SPRITE || tim.img_h < SPRITE) return;
+        if (tim.index_data.empty()) return;
+
+        int pages = (int)tim.clut_pages.size();
+
+        // Load capsule sprite
+        if (pages > 0) {
+            const ClutPage& pg = tim.clut_pages[0]; // Use the first CLUT page
+
+            std::vector<uint32_t> sprite(SPRITE * SPRITE);
+            for (int y = 0; y < SPRITE; y++) {
+                for (int x = 0; x < SPRITE; x++) {
+                    uint8_t idx = tim.index_data[y * tim.img_w + x];
+                    sprite[y * SPRITE + x] = (idx < pg.colors) ? pg.palette[idx] : 0u;
+                }
+            }
+
+            GLuint tex_id;
+            glGenTextures(1, &tex_id);
+            glBindTexture(GL_TEXTURE_2D, tex_id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SPRITE, SPRITE, 0, GL_RGBA, GL_UNSIGNED_BYTE, sprite.data());
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+            flip_tex = tex_id;
+        }
+
+        flip_sprites_loaded = true;
+    }
+
     void load_stone_sprites(const TimDecoded& tim) {
 
         if (tim.img_w < SPRITE || tim.img_h < SPRITE) return;
@@ -346,6 +417,20 @@ struct CourseViewer {
                 if (type >= EDIT_TIMER05 && type <= EDIT_TIMER40) {
                     int i = type - EDIT_TIMER05; // 0..4
                     GLuint tex = timer_tex[i];
+                    if (tex) {
+                        dl->AddImage((ImTextureID)(uintptr_t)tex, tl, br);
+                        drew_sprite = true;
+                    }
+                }
+                if (type == EDIT_AIR) {
+                    GLuint tex = capsule_tex;
+                    if (tex) {
+                        dl->AddImage((ImTextureID)(uintptr_t)tex, tl, br);
+                        drew_sprite = true;
+                    }
+                }
+                if (type == EDIT_FLIP) {
+                    GLuint tex = flip_tex; 
                     if (tex) {
                         dl->AddImage((ImTextureID)(uintptr_t)tex, tl, br);
                         drew_sprite = true;

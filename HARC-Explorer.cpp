@@ -502,6 +502,20 @@ int main(int argc, char** argv) {
                     app.course_viewer.load_stone_sprites(tim);
                 }
             }
+            if (nm == "SANSO3M.TIM") {
+                auto raw = read_entry(app.arc, e);
+                if (!raw.empty()) {
+                    auto tim = decode_tim_data(raw.data(), raw.size());
+                    app.course_viewer.load_capsule_sprites(tim);
+                }
+            }
+            if (nm == "SANSO3M.TIM") {
+                auto raw = read_entry(app.arc, e);
+                if (!raw.empty()) {
+                    auto tim = decode_tim_data(raw.data(), raw.size());
+                    app.course_viewer.load_capsule_sprites(tim);
+                }
+            }
         }
     }
 

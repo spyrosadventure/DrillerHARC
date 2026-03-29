@@ -25,6 +25,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <commdlg.h>
+#include <shlobj.h>
 #endif
 #include <iostream>
 
@@ -294,15 +295,42 @@ static void draw_rom_tree(AppState& app) {
 
         ImGuiTreeNodeFlags flags =
             ImGuiTreeNodeFlags_Leaf |
+            ImGuiTreeNodeFlags_NoTreePushOnOpen |   
+
             ImGuiTreeNodeFlags_SpanFullWidth;
+
         if (i == app.rom_selected_idx)
             flags |= ImGuiTreeNodeFlags_Selected;
 
-        ImGui::TreeNodeEx((void*)(intptr_t)i, flags, "%s", e.name);
+        bool node_open = ImGui::TreeNodeEx(
+            (void*)(intptr_t)i,
+            flags,
+            "%s",
+            e.name
+        );
+
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
             app.select_rom_entry(i);
-        ImGui::TreePop();
+
     }
+}
+
+static void mkdir_recursive(const std::string& path) {
+#ifdef _WIN32
+
+    std::string cur;
+    for (char c : path) {
+        cur += c;
+        if (c == '\\' || c == '/') {
+            CreateDirectoryA(cur.c_str(), nullptr); 
+
+        }
+    }
+    CreateDirectoryA(path.c_str(), nullptr);
+#else
+    std::string cmd = "mkdir -p \"" + path + "\"";
+    system(cmd.c_str());
+#endif
 }
 
 static void draw_preview_panel(AppState& app, const char* entry_name,
@@ -418,6 +446,105 @@ static void draw_preview_panel(AppState& app, const char* entry_name,
     }
 }
 
+static std::string harc_entry_relpath(const Archive& arc, int idx) {
+    if (idx < 0 || idx >= (int)arc.entries.size()) return {};
+    std::vector<std::string> parts;
+    int cur = idx;
+    while (cur >= 0 && cur < (int)arc.entries.size()) {
+        const HarcEntry& e = arc.entries[cur];
+        if (e.is_root) break;          
+
+        parts.push_back(e.name);
+        if (e.parent == NO_PARENT || e.parent >= arc.entries.size()) break;
+        if (arc.entries[e.parent].is_root) break;
+        cur = (int)e.parent;
+    }
+    std::reverse(parts.begin(), parts.end());
+    std::string result;
+    for (size_t i = 0; i < parts.size(); i++) {
+        if (i) result += '/';
+        result += parts[i];
+    }
+    return result;
+}
+
+struct ExtractResult { int ok = 0; int fail = 0; };
+
+static void extract_harc_subtree(Archive& arc, int node_idx,
+    const std::string& dest_dir,
+    ExtractResult& res) {
+    if (node_idx < 0 || node_idx >= (int)arc.entries.size()) return;
+    const HarcEntry& e = arc.entries[node_idx];
+
+    if (e.is_file) {
+        std::string relpath = harc_entry_relpath(arc, node_idx);
+
+        std::string full = dest_dir + "/" + relpath;
+
+        size_t sep = full.rfind('/');
+        if (sep != std::string::npos) mkdir_recursive(full.substr(0, sep));
+
+        auto data = read_entry(arc, e);
+        if (data.empty()) { ++res.fail; return; }
+
+        FILE* f = fopen(full.c_str(), "wb");
+        if (!f) { ++res.fail; return; }
+        fwrite(data.data(), 1, data.size(), f);
+        fclose(f);
+        ++res.ok;
+    }
+
+    for (int child : e.children)
+        extract_harc_subtree(arc, child, dest_dir, res);
+}
+
+static ExtractResult extract_all_harc(Archive& arc, const std::string& dest_dir) {
+    ExtractResult res;
+    if (arc.root_idx < 0) return res;
+    extract_harc_subtree(arc, arc.root_idx, dest_dir, res);
+    return res;
+}
+
+static ExtractResult extract_all_rom(RomArchive& rom, const std::string& dest_dir) {
+    ExtractResult res;
+    mkdir_recursive(dest_dir);
+    for (const RomEntry& e : rom.entries) {
+        std::string full = dest_dir + "/" + e.name;
+        auto data = read_rom_entry(rom, e);
+        if (data.empty()) { ++res.fail; continue; }
+        FILE* f = fopen(full.c_str(), "wb");
+        if (!f) { ++res.fail; continue; }
+        fwrite(data.data(), 1, data.size(), f);
+        fclose(f);
+        ++res.ok;
+    }
+    return res;
+}
+
+static std::string choose_extract_dir(const char* title = "Choose extraction folder") {
+#ifdef _WIN32
+    char path[MAX_PATH] = {};
+    BROWSEINFOA bi{};
+    bi.lpszTitle  = title;
+    bi.ulFlags    = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+    LPITEMIDLIST pidl = SHBrowseForFolderA(&bi);
+    if (!pidl) return {};
+    SHGetPathFromIDListA(pidl, path);
+    CoTaskMemFree(pidl);
+    return path;
+#else
+
+    fprintf(stderr, "Enter extraction path: ");
+    char buf[4096] = {};
+    if (fgets(buf, sizeof(buf), stdin)) {
+        size_t len = strlen(buf);
+        if (len > 0 && buf[len-1] == '\n') buf[len-1] = '\0';
+        return buf;
+    }
+    return ".";
+#endif
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         fprintf(stderr, "Usage: harc <archive.dat | archive.ROM>\n");
@@ -467,57 +594,29 @@ int main(int argc, char** argv) {
             std::string nm = e.name;
             std::transform(nm.begin(), nm.end(), nm.begin(), ::toupper);
 
-            if (nm == "BLK17M.TIM") {
-                auto raw = read_entry(app.arc, e);
-                if (!raw.empty()) {
-                    auto tim = decode_tim_data(raw.data(), raw.size());
-                    app.course_viewer.load_block_sprites(tim);
+            auto load_sprite = [&](const char* name, auto fn) {
+                if (nm == name) {
+                    auto raw = read_entry(app.arc, e);
+                    if (!raw.empty()) {
+                        auto tim = decode_tim_data(raw.data(), raw.size());
+                        fn(tim);
+                    }
                 }
-            }
-            if (nm == "BLKMTM.TIM") {
-                auto raw = read_entry(app.arc, e);
-                if (!raw.empty()) {
-                    auto tim = decode_tim_data(raw.data(), raw.size());
-                    app.course_viewer.load_iron_sprites(tim);
-                }
-            }
-            if (nm == "BLOCK07M.TIM") {
-                auto raw = read_entry(app.arc, e);
-                if (!raw.empty()) {
-                    auto tim = decode_tim_data(raw.data(), raw.size());
-                    app.course_viewer.load_crystal_sprites(tim);
-                }
-            }
-            if (nm == "TIMER40.TIM") {
-                auto raw = read_entry(app.arc, e);
-                if (!raw.empty()) {
-                    auto tim = decode_tim_data(raw.data(), raw.size());
-                    app.course_viewer.load_timer_sprites(tim);
-                }
-            }
-            if (nm == "ROCK_K.TIM") {
-                auto raw = read_entry(app.arc, e);
-                if (!raw.empty()) {
-                    auto tim = decode_tim_data(raw.data(), raw.size());
-                    app.course_viewer.load_stone_sprites(tim);
-                }
-            }
-            if (nm == "SANSO3M.TIM") {
-                auto raw = read_entry(app.arc, e);
-                if (!raw.empty()) {
-                    auto tim = decode_tim_data(raw.data(), raw.size());
-                    app.course_viewer.load_capsule_sprites(tim);
-                }
-            }
-            if (nm == "SANSO3M.TIM") {
-                auto raw = read_entry(app.arc, e);
-                if (!raw.empty()) {
-                    auto tim = decode_tim_data(raw.data(), raw.size());
-                    app.course_viewer.load_capsule_sprites(tim);
-                }
-            }
+                };
+
+            load_sprite("BLK17M.TIM", [&](auto& t) { app.course_viewer.load_block_sprites(t); });
+            load_sprite("BLKMTM.TIM", [&](auto& t) { app.course_viewer.load_iron_sprites(t); });
+            load_sprite("BLOCK07M.TIM", [&](auto& t) { app.course_viewer.load_crystal_sprites(t); });
+            load_sprite("TIMER40.TIM", [&](auto& t) { app.course_viewer.load_timer_sprites(t); });
+            load_sprite("ROCK_K.TIM", [&](auto& t) { app.course_viewer.load_stone_sprites(t); });
+            load_sprite("SANSO3M.TIM", [&](auto& t) { app.course_viewer.load_capsule_sprites(t); });
+            load_sprite("ITEM2_40.TIM", [&](auto& t) { app.course_viewer.load_crystalitem_sprites(t); });
+            load_sprite("ITEM1_40.TIM", [&](auto& t) { app.course_viewer.load_flip_sprites(t); });
+            load_sprite("ITEM3_40.TIM", [&](auto& t) { app.course_viewer.load_turn_sprites(t); });
         }
     }
+
+    std::string extract_status;
 
     while (!glfwWindowShouldClose(win)) {
         glfwPollEvents();
@@ -528,70 +627,100 @@ int main(int argc, char** argv) {
         ImGuiViewport* vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(vp->Pos);
         ImGui::SetNextWindowSize(vp->Size);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,  0);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,   {0,0});
-        ImGui::Begin("##root", nullptr,
-            ImGuiWindowFlags_NoTitleBar  | ImGuiWindowFlags_NoResize |
-            ImGuiWindowFlags_NoMove      | ImGuiWindowFlags_NoBringToFrontOnFocus |
-            ImGuiWindowFlags_NoNav       | ImGuiWindowFlags_MenuBar);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0,0});
+
+        bool root_open = ImGui::Begin("##root", nullptr,
+            ImGuiWindowFlags_NoTitleBar |
+            ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoBringToFrontOnFocus |
+            ImGuiWindowFlags_NoNav |
+            ImGuiWindowFlags_MenuBar);
+
         ImGui::PopStyleVar(3);
 
-        if (ImGui::BeginMenuBar()) {
-            const char* kind_label =
-                app.arc_kind == ArchiveKind::HARC ? "HARC:" : "ROM:";
-            ImGui::TextDisabled("%s", kind_label); ImGui::SameLine();
-            ImGui::Text("%s", argv[1]);
-            ImGui::EndMenuBar();
-        }
+        if (root_open)
+        {
+            if (ImGui::BeginMenuBar()) {
+                const char* kind_label =
+                    app.arc_kind == ArchiveKind::HARC ? "HARC:" : "ROM:";
+                ImGui::TextDisabled("%s", kind_label); ImGui::SameLine();
+                ImGui::Text("%s", argv[1]);
 
-        float avail_h = ImGui::GetContentRegionAvail().y;
+                ImGui::SameLine(0, 20);
+                if (ImGui::Button("Extract All")) {
+                    std::string dest = choose_extract_dir("Choose extraction folder");
+                    if (!dest.empty()) {
+                        ExtractResult res;
+                        if (app.arc_kind == ArchiveKind::HARC)
+                            res = extract_all_harc(app.arc, dest);
+                        else
+                            res = extract_all_rom(app.rom, dest);
 
-        ImGui::BeginChild("##tree", {280, avail_h}, true);
-        if (app.arc_kind == ArchiveKind::HARC && app.arc.root_idx >= 0)
-            draw_tree_node(app, app.arc.root_idx);
-        else if (app.arc_kind == ArchiveKind::ROM)
-            draw_rom_tree(app);
-        ImGui::EndChild();
+                        char buf[128];
+                        snprintf(buf, sizeof(buf),
+                            "Done: %d extracted, %d failed  —  %s",
+                            res.ok, res.fail, dest.c_str());
+                        extract_status = buf;
+                    }
+                }
 
-        ImGui::SameLine();
+                if (!extract_status.empty()) {
+                    ImGui::SameLine(0, 16);
+                    ImGui::TextDisabled("%s", extract_status.c_str());
+                }
 
-        ImGui::BeginChild("##right", {0, avail_h}, false);
+                ImGui::EndMenuBar();
+            }
 
-        if (app.arc_kind == ArchiveKind::HARC) {
+            float avail_h = ImGui::GetContentRegionAvail().y;
 
-            if (app.selected_idx >= 0 && app.selected_idx < (int)app.arc.entries.size()) {
-                const HarcEntry& e = app.arc.entries[app.selected_idx];
-                ImGui::TextDisabled("[%s]", e.is_root ? "ROOT" : e.is_dir ? "DIR" : "FILE");
-                ImGui::SameLine(); ImGui::Text("%s", e.name);
-                ImGui::Separator();
+            ImGui::BeginChild("##tree", {280, avail_h}, true);
+            if (app.arc_kind == ArchiveKind::HARC && app.arc.root_idx >= 0)
+                draw_tree_node(app, app.arc.root_idx);
+            else if (app.arc_kind == ArchiveKind::ROM)
+                draw_rom_tree(app);
+            ImGui::EndChild();
 
-                if (e.is_file) {
-                    draw_preview_panel(app, e.name, e.data_offset, e.comp_size, e.raw_size);
+            ImGui::SameLine();
+
+            ImGui::BeginChild("##right", {0, avail_h}, false);
+
+            if (app.arc_kind == ArchiveKind::HARC) {
+                if (app.selected_idx >= 0 && app.selected_idx < (int)app.arc.entries.size()) {
+                    const HarcEntry& e = app.arc.entries[app.selected_idx];
+                    ImGui::TextDisabled("[%s]", e.is_root ? "ROOT" : e.is_dir ? "DIR" : "FILE");
+                    ImGui::SameLine(); ImGui::Text("%s", e.name);
+                    ImGui::Separator();
+
+                    if (e.is_file) {
+                        draw_preview_panel(app, e.name, e.data_offset, e.comp_size, e.raw_size);
+                    } else {
+                        ImGui::TextDisabled("Directory — select a .TIM file to preview.");
+                    }
                 } else {
-                    ImGui::TextDisabled("Directory \x97 select a .TIM file to preview.");
+                    ImGui::TextDisabled("Select an entry from the tree.");
                 }
             } else {
-                ImGui::TextDisabled("Select an entry from the tree.");
+                if (app.rom_selected_idx >= 0 &&
+                    app.rom_selected_idx < (int)app.rom.entries.size()) {
+                    const RomEntry& e = app.rom.entries[app.rom_selected_idx];
+                    draw_preview_panel(app, e.name, e.offset, e.length, e.length);
+                } else {
+                    ImGui::TextDisabled("Select a file from the list.");
+                    ImGui::Spacing();
+                    ImGui::TextDisabled("Archive : %s", app.rom.arc_name);
+                    ImGui::TextDisabled("ROM size: %u B  |  Files: %u",
+                        app.rom.rom_size, app.rom.file_count);
+                }
             }
-        } else {
 
-            if (app.rom_selected_idx >= 0 &&
-                app.rom_selected_idx < (int)app.rom.entries.size()) {
-                const RomEntry& e = app.rom.entries[app.rom_selected_idx];
-                draw_preview_panel(app, e.name, e.offset, e.length, e.length);
-            } else {
-                ImGui::TextDisabled("Select a file from the list.");
-
-                ImGui::Spacing();
-                ImGui::TextDisabled("Archive : %s", app.rom.arc_name);
-                ImGui::TextDisabled("ROM size: %u B  |  Files: %u",
-                    app.rom.rom_size, app.rom.file_count);
-            }
+            ImGui::EndChild();
         }
 
-        ImGui::EndChild();
-        ImGui::End();
+        ImGui::End(); 
 
         app.course_viewer.draw();
 

@@ -42,32 +42,32 @@ struct BlockInfo {
 
 inline const BlockInfo& block_info(uint8_t id) {
     static const BlockInfo table[] = {
-        { "BLOCK_B (Blue)",     IM_COL32( 80, 120, 220, 255) },
-        { "BLOCK_G (Green)",    IM_COL32( 80, 200,  80, 255) },
-        { "BLOCK_R (Red)",      IM_COL32(220,  60,  60, 255) },
-        { "BLOCK_Y (Yellow)",   IM_COL32(220, 200,  50, 255) },
-        { "STIFF (Stone)",      IM_COL32(150, 140, 130, 255) },
-        { "IRON",               IM_COL32(100, 110, 120, 255) },
-        { "CRYSTAL 0.5s",       IM_COL32(160, 220, 255, 255) },
-        { "CRYSTAL 1.0s",       IM_COL32(140, 200, 255, 255) },
-        { "CRYSTAL 1.5s",       IM_COL32(120, 180, 255, 255) },
-        { "CRYSTAL 2.0s",       IM_COL32(100, 160, 255, 255) },
-        { "CRYSTAL 2.5s",       IM_COL32( 80, 140, 240, 255) },
-        { "CRYSTAL 3.0s",       IM_COL32( 60, 120, 220, 255) },
-        { "CRYSTAL 3.5s",       IM_COL32( 40, 100, 200, 255) },
-        { "CRYSTAL 4.0s",       IM_COL32( 20,  80, 180, 255) },
-        { "BLANK",              IM_COL32( 20,  20,  20, 255) },
-        { "BLANK",              IM_COL32( 20,  20,  20, 255) },
-        { "TIMER +0.5s",        IM_COL32(255, 180,  80, 255) },
-        { "TIMER +1.0s",        IM_COL32(255, 160,  60, 255) },
-        { "TIMER +2.0s",        IM_COL32(255, 140,  40, 255) },
-        { "TIMER +3.0s",        IM_COL32(255, 120,  20, 255) },
-        { "TIMER +4.0s",        IM_COL32(255, 100,   0, 255) },
-        { "TURN",               IM_COL32(180,  80, 220, 255) },
-        { "FLIP",               IM_COL32(220,  80, 180, 255) },
-        { "CRYSTAL (generic)",  IM_COL32(180, 230, 255, 255) },
-        { "AIR (Oxygen)",       IM_COL32(200, 240, 200, 255) },
-        { "BOUNDARY",           IM_COL32( 60,  60,  60, 255) },
+        { "BLOCK_B (Blue)",     IM_COL32( 80, 120, 220, 255) }, // yes
+        { "BLOCK_G (Green)",    IM_COL32( 80, 200,  80, 255) }, // yes
+        { "BLOCK_R (Red)",      IM_COL32(220,  60,  60, 255) }, // yes
+        { "BLOCK_Y (Yellow)",   IM_COL32(220, 200,  50, 255) }, // yes
+        { "STIFF (Stone)",      IM_COL32(150, 140, 130, 255) }, // yes
+        { "IRON",               IM_COL32(100, 110, 120, 255) }, // yes
+        { "CRYSTAL 0.5s",       IM_COL32(160, 220, 255, 255) }, // yes
+        { "CRYSTAL 1.0s",       IM_COL32(140, 200, 255, 255) }, // yes
+        { "CRYSTAL 1.5s",       IM_COL32(120, 180, 255, 255) }, // yes
+        { "CRYSTAL 2.0s",       IM_COL32(100, 160, 255, 255) }, // yes
+        { "CRYSTAL 2.5s",       IM_COL32( 80, 140, 240, 255) }, // yes
+        { "CRYSTAL 3.0s",       IM_COL32( 60, 120, 220, 255) }, // yes
+        { "CRYSTAL 3.5s",       IM_COL32( 40, 100, 200, 255) }, // yes
+        { "CRYSTAL 4.0s",       IM_COL32( 20,  80, 180, 255) }, // yes
+        { "BLANK",              IM_COL32( 20,  20,  20, 255) }, // just blank
+        { "BLANK",              IM_COL32( 20,  20,  20, 255) }, // just blank
+        { "TIMER +0.5s",        IM_COL32(255, 180,  80, 255) }, // yes
+        { "TIMER +1.0s",        IM_COL32(255, 160,  60, 255) }, // yes
+        { "TIMER +2.0s",        IM_COL32(255, 140,  40, 255) }, // yes
+        { "TIMER +3.0s",        IM_COL32(255, 120,  20, 255) }, // yes
+        { "TIMER +4.0s",        IM_COL32(255, 100,   0, 255) }, // yes
+        { "TURN",               IM_COL32(180,  80, 220, 255) }, // yes
+        { "FLIP",               IM_COL32(220,  80, 180, 255) }, // yes
+        { "CRYSTAL (generic)",  IM_COL32(180, 230, 255, 255) }, // yes
+        { "AIR (Oxygen)",       IM_COL32(200, 240, 200, 255) }, // yes
+        { "BOUNDARY",           IM_COL32( 60,  60,  60, 255) }, // just blank
     };
     static const BlockInfo unknown = { "UNKNOWN", IM_COL32(80, 80, 80, 255) };
     if (id >= sizeof(table) / sizeof(table[0])) return unknown;
@@ -91,12 +91,16 @@ struct CourseViewer {
     GLuint stone_tex = 0;
     GLuint capsule_tex = 0;
     GLuint flip_tex = 0;
+    GLuint turn_tex = 0;
+    GLuint crystalitem_tex = 0;
     bool   sprites_loaded = false;
     bool   iron_sprites_loaded = false;
     bool   crystal_sprites_loaded = false;
     bool   stone_sprites_loaded = false;
     bool   capsule_sprites_loaded = false;
     bool   flip_sprites_loaded = false;
+    bool   turn_sprites_loaded = false;
+    bool   crystalitem_sprites_loaded = false;
 
     static constexpr int   COLS    = 9;
     static constexpr int   SPRITE  = 40;   // sprite size in the sheet
@@ -210,6 +214,72 @@ struct CourseViewer {
         }
 
         crystal_sprites_loaded = true;
+    }
+
+    void load_turn_sprites(const TimDecoded& tim) {
+
+        if (tim.img_w < SPRITE || tim.img_h < SPRITE) return;
+        if (tim.index_data.empty()) return;
+
+        int pages = (int)tim.clut_pages.size();
+
+        // Load iron sprite (assuming iron is in the first page of its TIM)
+        if (pages > 0) {
+            const ClutPage& pg = tim.clut_pages[0]; // Use the first CLUT page
+
+            std::vector<uint32_t> sprite(SPRITE * SPRITE);
+            for (int y = 0; y < SPRITE; y++) {
+                for (int x = 0; x < SPRITE; x++) {
+                    uint8_t idx = tim.index_data[y * tim.img_w + x];
+                    sprite[y * SPRITE + x] = (idx < pg.colors) ? pg.palette[idx] : 0u;
+                }
+            }
+
+            GLuint tex_id;
+            glGenTextures(1, &tex_id);
+            glBindTexture(GL_TEXTURE_2D, tex_id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SPRITE, SPRITE, 0, GL_RGBA, GL_UNSIGNED_BYTE, sprite.data());
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+            turn_tex = tex_id;
+        }
+
+        turn_sprites_loaded = true;
+    }
+
+    void load_crystalitem_sprites(const TimDecoded& tim) {
+
+        if (tim.img_w < SPRITE || tim.img_h < SPRITE) return;
+        if (tim.index_data.empty()) return;
+
+        int pages = (int)tim.clut_pages.size();
+
+        // Load iron sprite (assuming iron is in the first page of its TIM)
+        if (pages > 0) {
+            const ClutPage& pg = tim.clut_pages[0]; // Use the first CLUT page
+
+            std::vector<uint32_t> sprite(SPRITE * SPRITE);
+            for (int y = 0; y < SPRITE; y++) {
+                for (int x = 0; x < SPRITE; x++) {
+                    uint8_t idx = tim.index_data[y * tim.img_w + x];
+                    sprite[y * SPRITE + x] = (idx < pg.colors) ? pg.palette[idx] : 0u;
+                }
+            }
+
+            GLuint tex_id;
+            glGenTextures(1, &tex_id);
+            glBindTexture(GL_TEXTURE_2D, tex_id);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SPRITE, SPRITE, 0, GL_RGBA, GL_UNSIGNED_BYTE, sprite.data());
+            glBindTexture(GL_TEXTURE_2D, 0);
+
+            crystalitem_tex = tex_id;
+        }
+
+        crystalitem_sprites_loaded = true;
     }
 
     void load_iron_sprites(const TimDecoded& tim) {
@@ -407,7 +477,14 @@ struct CourseViewer {
                         drew_sprite = true;
                     }
                 }
-                if (type >= EDIT_CRYSTAL05 && type <= EDIT_CRYSTAL40 or type == EDIT_CRYSTAL) {
+                if (type == EDIT_CRYSTAL) { // 2 
+                    GLuint tex = crystalitem_tex; 
+                    if (tex) {
+                        dl->AddImage((ImTextureID)(uintptr_t)tex, tl, br);
+                        drew_sprite = true;
+                    }
+                }
+                if (type >= EDIT_CRYSTAL05 && type <= EDIT_CRYSTAL40) {
                     GLuint tex = crystal_tex;
                     if (tex) {
                         dl->AddImage((ImTextureID)(uintptr_t)tex, tl, br);
@@ -430,6 +507,13 @@ struct CourseViewer {
                     }
                 }
                 if (type == EDIT_FLIP) {
+                    GLuint tex = flip_tex; 
+                    if (tex) {
+                        dl->AddImage((ImTextureID)(uintptr_t)tex, tl, br);
+                        drew_sprite = true;
+                    }
+                }
+                if (type == EDIT_TURN) {
                     GLuint tex = flip_tex; 
                     if (tex) {
                         dl->AddImage((ImTextureID)(uintptr_t)tex, tl, br);
